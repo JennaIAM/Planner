@@ -12,7 +12,8 @@ const TYPES = [
   { id: 'word',   label: 'Aa Word'  },
   { id: 'doodle', label: '✎ Doodle' },
 ];
-const ENTRY_MAX = 60;
+const ENTRY_MAX = 80;
+function growEntry(el) { el.style.height = 'auto'; el.style.height = el.scrollHeight + 'px'; }
 
 /* ---------- tiny DOM helper ---------- */
 const $ = (s, r = document) => r.querySelector(s);
@@ -83,6 +84,7 @@ async function writeState() {
 let saveTimer;
 function save() { clearTimeout(saveTimer); saveTimer = setTimeout(writeState, 250); }
 document.addEventListener('visibilitychange', () => { if (document.hidden) { clearTimeout(saveTimer); writeState(); } });
+window.addEventListener('pagehide', () => { clearTimeout(saveTimer); writeState(); });
 
 /* ---------- state ---------- */
 let state = { v: 1, doodles: {}, months: {} };
@@ -173,7 +175,7 @@ function renderDays(main) {
     h('th', { class: 'c-mark' }, '✦'),
     h('th', { class: 'c-entry', style: 'text-align:left;padding-left:8px' }, 'one line a day'),
     M.trackers.map(tr => h('th', { class: 'c-trk' + (tr.type === 'word' ? ' wide' : ''), onclick: () => editTracker(tr) },
-      h('span', { class: 'trkname' }, tr.name || '—'))),
+      h('span', { class: 'trkname' }, tr.title === 'doodle' && tr.titleImg ? h('img', { src: tr.titleImg, alt: tr.name || 'tracker' }) : (tr.name || '—')))),
     h('th', { class: 'c-add' }, h('button', { class: 'addtrk', 'aria-label': 'Add tracker', onclick: () => editTracker(null) }, '+')));
 
   const body = h('tbody', {});
@@ -187,9 +189,9 @@ function renderDays(main) {
         ids.length ? ids.slice(0, 3).map(id => h('img', { src: doodleImg(id), alt: '' })) : h('span', { class: 'dot' })));
     };
     fillMark();
-    const entry = h('input', {
-      class: 'entry', value: M.entries[d] || '', maxlength: ENTRY_MAX, enterkeyhint: 'next', 'data-day': d, autocomplete: 'off',
-      oninput: e => { const v = e.target.value; if (v) M.entries[d] = v; else delete M.entries[d]; save(); },
+    const entry = h('textarea', {
+      class: 'entry', rows: 1, value: M.entries[d] || '', maxlength: ENTRY_MAX, enterkeyhint: 'next', 'data-day': d, autocomplete: 'off',
+      oninput: e => { const v = e.target.value.replace(/\n/g, ' '); if (v !== e.target.value) e.target.value = v; if (v) M.entries[d] = v; else delete M.entries[d]; save(); growEntry(e.target); },
       onkeydown: e => { if (e.key === 'Enter') { e.preventDefault(); const nx = $(`.entry[data-day="${d + 1}"]`); nx ? nx.focus() : e.target.blur(); } },
     });
     body.append(h('tr', { class: cls },
@@ -201,6 +203,7 @@ function renderDays(main) {
   }
   const table = h('table', { class: 'days' }, h('thead', {}, headRow), body);
   main.append(table);
+  requestAnimationFrame(() => main.querySelectorAll('.entry').forEach(growEntry));
   if (!M.trackers.length) {
     // gentle hint, only once per month view
   }
@@ -263,7 +266,8 @@ function openMarkSheet(d, refresh) {
 function editTracker(tr) {
   const M = month();
   const isNew = !tr;
-  const t = tr ? { ...tr } : { id: uid(), name: '', type: 'check', doodle: null };
+  const t = tr ? { ...tr } : { id: uid(), name: '', type: 'check', doodle: null, title: 'text', titleImg: null };
+  if (!t.title) t.title = 'text';
   const name = h('input', { class: 'field', placeholder: 'e.g. Creatine, Water, Mood', maxlength: 24, value: t.name });
   const typeRow = h('div', { class: 'seg' });
   const dRow = h('div', {});
@@ -285,6 +289,26 @@ function editTracker(tr) {
   };
   drawTypes(); drawDoodle();
 
+  // column title: words or a doodle that replaces the name
+  const nameLbl = h('label', { class: 'lbl' });
+  const titleSeg = h('div', { class: 'seg' });
+  const titleRow = h('div', {});
+  const drawTitle = () => {
+    put(titleSeg, [['text', 'Aa Words'], ['doodle', '✎ Draw it']].map(([id, l]) =>
+      h('button', { class: 'segb' + (t.title === id ? ' on' : ''), onclick: () => { t.title = id; drawTitle(); if (id === 'doodle' && !t.titleImg) drawTitleImg(); } }, l)));
+    nameLbl.textContent = t.title === 'doodle' ? 'Name (only for you, not shown)' : 'Name';
+    if (t.title !== 'doodle') return put(titleRow);
+    put(titleRow, h('div', { class: 'stampgrid', style: 'margin-top:8px' },
+      h('button', { class: 'stamp' + (t.titleImg ? ' on' : ' new'), onclick: drawTitleImg },
+        t.titleImg ? h('img', { src: t.titleImg, alt: '' }) : h('span', { class: 'plus' }, '+'),
+        h('span', {}, t.titleImg ? 'redraw' : 'Draw title'))));
+  };
+  const drawTitleImg = () => openDoodleEditor({
+    title: 'Draw the column title', img: t.titleImg,
+    onSave: img => { t.titleImg = img; drawTitle(); },
+  });
+  drawTitle();
+
   const idx = M.trackers.findIndex(x => x.id === t.id);
   const move = dir => {
     const j = idx + dir; if (j < 0 || j >= M.trackers.length) return;
@@ -292,7 +316,8 @@ function editTracker(tr) {
     save(); close(); render();
   };
   const close = sheet(isNew ? 'New tracker' : 'Edit tracker', [
-    h('label', { class: 'lbl' }, 'Name'), name,
+    h('label', { class: 'lbl' }, 'Column title'), titleSeg, titleRow,
+    nameLbl, name,
     h('label', { class: 'lbl' }, 'What do you write each day?'), typeRow, dRow,
     h('div', { class: 'sheetfoot' },
       !isNew && h('button', { class: 'btn danger', onclick: () => {
@@ -304,7 +329,8 @@ function editTracker(tr) {
       h('span', { class: 'spacer' }),
       h('button', { class: 'btn primary', onclick: () => {
         t.name = name.value.trim();
-        if (!t.name) { name.focus(); return toast('Give it a name'); }
+        if (t.title === 'doodle' && !t.titleImg) return toast('Draw the title first');
+        if (!t.name && t.title !== 'doodle') { name.focus(); return toast('Give it a name'); }
         if (t.type === 'doodle' && !t.doodle) return toast('Pick or draw a doodle');
         if (!isNew && tr.type !== t.type) {
           const had = Object.keys(M.values[t.id] || {}).length;

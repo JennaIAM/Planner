@@ -56,13 +56,13 @@ table.days{border-collapse:separate;border-spacing:0;min-width:100%}
 .markbtn img+img{margin-left:-10px}
 .markbtn .dot{width:5px;height:5px;border-radius:50%;background:var(--line-strong)}
 .c-entry{min-width:180px;width:100%;padding:0 6px!important}
-.entry{width:100%;border:0;background:transparent;outline:none;font-size:18px;padding:6px 0;height:var(--row)}
+.entry{display:block;width:100%;border:0;background:transparent;outline:none;font-size:18px;line-height:22px;padding:8px 0;height:var(--row);min-height:var(--row);resize:none;overflow:hidden;white-space:pre-wrap;overflow-wrap:anywhere}
 .entry::placeholder{color:#c9c4b6}
 .c-trk{width:62px;min-width:62px;max-width:84px;text-align:center;border-left:1px dashed var(--line-strong)}
 .c-trk.wide{width:84px;min-width:84px}
 th.c-trk{padding:0 3px!important;cursor:pointer}
-.trkname{display:block;font-size:13px;line-height:1.1;color:var(--ink);max-height:30px;overflow:hidden;overflow-wrap:anywhere;hyphens:auto}
-.trkname img{width:26px;height:26px;object-fit:contain;display:block;margin:0 auto}
+.trkname{display:block;font-size:13px;line-height:1.1;color:var(--ink);max-height:38px;overflow:hidden;overflow-wrap:anywhere;hyphens:auto}
+.trkname img{width:36px;height:36px;object-fit:contain;display:block;margin:0 auto}
 .trkname .t{font-size:11px;color:var(--muted)}
 .c-add{width:44px;min-width:44px;border-left:1px dashed var(--line-strong)}
 .addtrk{width:30px;height:30px;border-radius:50%;border:1.5px dashed var(--muted);color:var(--muted);font-size:20px;line-height:1}
@@ -173,3 +173,6 @@ table.ntable{border-collapse:collapse;background:rgba(255,255,255,.75)}
 
 .toast{position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom) + 28px);transform:translateX(-50%);background:var(--ink);color:#fff;
   padding:8px 16px;border-radius:999px;font-size:16px;z-index:99;animation:fade .2s;white-space:nowrap}
+.days tbody td{vertical-align:top}
+tbody .c-day{line-height:var(--row)}
+.markbtn{margin:2px auto 0}
