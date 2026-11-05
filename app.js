@@ -3,6 +3,7 @@
    All data lives on this device (IndexedDB). Use ☰ → Save backup now and then. */
 
 const DAY_ABBR = ['Su', 'M', 'Tu', 'W', 'Th', 'F', 'Sa'];
+const DAY_FULL = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
 const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 const COLORS = ['#2f3542','#b0201b','#e84a5f','#f48fb1','#ef8b2c','#f2c418','#3aa76d','#2e86de','#8e5cc9','#8d6e63','#9aa0a6','#ffffff'];
 const TYPES = [
@@ -45,7 +46,14 @@ function toast(msg) {
   setTimeout(() => t.remove(), 1900);
 }
 
-/* ---------- storage (IndexedDB, localStorage fallback) ---------- */
+/* ---------- native app (Android / iPhone) ---------- */
+const NATIVE = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
+const plug = name => (NATIVE && window.capacitorExports) ? window.capacitorExports.registerPlugin(name) : null;
+const LN = plug('LocalNotifications'), FS = plug('Filesystem'), SH = plug('Share');
+if (NATIVE) plug('App'); // enables the Android back button to close open sheets
+const DATA_FILE = 'planner-data.json';
+
+/* ---------- storage (IndexedDB, localStorage fallback; plus a file in the native app) ---------- */
 const DB_NAME = 'notebook-planner', STORE = 'kv', KEY = 'state';
 let dbPromise = null;
 function idb() {
@@ -58,6 +66,13 @@ function idb() {
   return dbPromise;
 }
 async function loadState() {
+  if (NATIVE) {
+    try {
+      const r = await FS.readFile({ path: DATA_FILE, directory: 'DATA', encoding: 'utf8' });
+      const v = JSON.parse(r.data);
+      if (v && v.months) return v;
+    } catch (e) { /* no file yet */ }
+  }
   try {
     const db = await idb();
     const v = await new Promise((res, rej) => {
@@ -69,6 +84,10 @@ async function loadState() {
   try { return JSON.parse(localStorage.getItem(KEY) || 'null'); } catch { return null; }
 }
 async function writeState() {
+  if (NATIVE) {
+    try { await FS.writeFile({ path: DATA_FILE, directory: 'DATA', encoding: 'utf8', data: JSON.stringify(state) }); }
+    catch (e) { console.warn('file save failed', e); }
+  }
   try {
     const db = await idb();
     await new Promise((res, rej) => {
@@ -82,7 +101,7 @@ async function writeState() {
   }
 }
 let saveTimer;
-function save() { clearTimeout(saveTimer); saveTimer = setTimeout(writeState, 250); }
+function save() { clearTimeout(saveTimer); saveTimer = setTimeout(writeState, NATIVE ? 500 : 250); scheduleSync(); }
 document.addEventListener('visibilitychange', () => { if (document.hidden) { clearTimeout(saveTimer); writeState(); } });
 window.addEventListener('pagehide', () => { clearTimeout(saveTimer); writeState(); });
 
@@ -95,7 +114,8 @@ const keyOf = (y, m) => `${y}-${String(m + 1).padStart(2, '0')}`;
 const curKey = () => keyOf(ui.y, ui.m);
 function prevKey() { const d = new Date(ui.y, ui.m - 1, 1); return keyOf(d.getFullYear(), d.getMonth()); }
 function month(key = curKey()) {
-  if (!state.months[key]) state.months[key] = { entries: {}, marks: {}, trackers: [], values: {}, goals: [], notes: [] };
+  if (!state.months[key]) state.months[key] = { entries: {}, marks: {}, trackers: [], values: {}, goals: [], notes: [], todos: {} };
+  state.months[key].todos ||= {};
   return state.months[key];
 }
 const daysIn = (y, m) => new Date(y, m + 1, 0).getDate();
@@ -107,10 +127,11 @@ function render(keepScroll = true) {
   const st = keepScroll && old ? [old.scrollTop, old.scrollLeft] : null;
   const main = h('main', {});
   if (ui.tab === 'days') renderDays(main);
+  else if (ui.tab === 'todo') renderTodo(main);
   else if (ui.tab === 'goals') renderGoals(main);
   else renderNotes(main);
   $('#app').replaceChildren(header(), tabs(), main);
-  if (st) { main.scrollTop = st[0]; main.scrollLeft = st[1]; }
+  if (st) { main.scrollTop = st[0]; main.scrollLeft = ui.tab === 'days' ? st[1] : 0; }
   if (ui.jumpToday && ui.tab === 'days') {
     ui.jumpToday = false;
     const t = $('tr.today', main);
@@ -128,10 +149,10 @@ function header() {
 }
 function shift(n) {
   const d = new Date(ui.y, ui.m + n, 1);
-  ui.y = d.getFullYear(); ui.m = d.getMonth(); ui.jumpToday = true;
+  ui.y = d.getFullYear(); ui.m = d.getMonth(); ui.jumpToday = true; ui.todoDay = null;
   render(false);
 }
-function goToday() { const d = new Date(); ui.y = d.getFullYear(); ui.m = d.getMonth(); ui.jumpToday = true; render(false); }
+function goToday() { const d = new Date(); ui.y = d.getFullYear(); ui.m = d.getMonth(); ui.jumpToday = true; ui.todoDay = null; render(false); }
 
 function tabs() {
   const M = state.months[curKey()];
@@ -139,6 +160,7 @@ function tabs() {
   const t = (id, label, extra) => h('button', { class: 'tab' + (ui.tab === id ? ' on' : ''), onclick: () => { ui.tab = id; ui.jumpToday = id === 'days'; render(false); } }, label, extra);
   return h('nav', { class: 'tabs' },
     t('days', 'Days'),
+    t('todo', 'To-do'),
     t('goals', 'Goals', g.length ? h('small', {}, `${g.filter(x => x.done).length}/${g.length}`) : null),
     t('notes', 'Notes'));
 }
@@ -195,7 +217,8 @@ function renderDays(main) {
       onkeydown: e => { if (e.key === 'Enter') { e.preventDefault(); const nx = $(`.entry[data-day="${d + 1}"]`); nx ? nx.focus() : e.target.blur(); } },
     });
     body.append(h('tr', { class: cls },
-      h('td', { class: 'c-day' }, h('b', {}, d), h('span', {}, DAY_ABBR[wd])),
+      h('td', { class: 'c-day', onclick: () => { ui.tab = 'todo'; ui.todoDay = d; render(false); } }, h('b', {}, d), h('span', {}, DAY_ABBR[wd]),
+        (M.todos[d] || []).length ? h('i', { class: 'pip' + ((M.todos[d] || []).every(x => x.done) ? ' done' : '') }) : null),
       markCell,
       h('td', { class: 'c-entry' }, entry),
       M.trackers.map(tr => trackerCell(M, tr, d)),
@@ -347,6 +370,300 @@ function editTracker(tr) {
   if (isNew) setTimeout(() => name.focus(), 250);
 }
 
+/* ---------- TO-DO ---------- */
+function curTodoDay() {
+  const n = daysIn(ui.y, ui.m);
+  if (!ui.todoDay || ui.todoDay > n) {
+    const t = new Date();
+    ui.todoDay = (t.getFullYear() === ui.y && t.getMonth() === ui.m) ? t.getDate() : 1;
+  }
+  return ui.todoDay;
+}
+const fmtTime = t => { const [hh, mm] = t.split(':').map(Number); return new Date(2000, 0, 1, hh, mm).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }); };
+
+function renderTodo(main) {
+  const M = month();
+  const n = daysIn(ui.y, ui.m), d = curTodoDay();
+  const today = new Date();
+  const isThisMonth = today.getFullYear() === ui.y && today.getMonth() === ui.m;
+
+  const strip = h('div', { class: 'daystrip' });
+  for (let dd = 1; dd <= n; dd++) {
+    const wd = new Date(ui.y, ui.m, dd).getDay();
+    const L = M.todos[dd] || [];
+    strip.append(h('button', {
+      class: 'dchip' + (dd === d ? ' on' : '') + (isThisMonth && today.getDate() === dd ? ' today' : ''),
+      onclick: () => { ui.todoDay = dd; render(); },
+    }, h('b', {}, dd), h('span', {}, DAY_ABBR[wd]), L.length ? h('i', { class: 'pip' + (L.every(x => x.done) ? ' done' : '') }) : null));
+  }
+
+  const wd = new Date(ui.y, ui.m, d).getDay();
+  const list = M.todos[d] || [];
+  const doneN = list.filter(x => x.done).length;
+  const page = h('div', { class: 'page' },
+    h('h2', {}, `${DAY_FULL[wd]} ${d}`, list.length ? h('span', { class: 'progress' }, `${doneN}/${list.length}`) : null),
+    h('p', { class: 'sub' }, 'Your to-do list for the day. Tap ⏰ to add a reminder time.'));
+  for (const item of list) page.append(todoRow(M, d, item));
+
+  const add = h('input', { class: 'gtext', placeholder: '+ add a to-do…', maxlength: 80, enterkeyhint: 'done' });
+  const commit = refocus => {
+    const v = add.value.trim(); if (!v) return;
+    add.value = '';
+    (M.todos[d] ||= []).push({ id: uid(), text: v, done: false, time: null }); save(); render();
+    if (refocus) { const a = $('.goal.adder .gtext'); a && a.focus(); }
+  };
+  add.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); commit(true); } });
+  add.addEventListener('blur', () => commit(false));
+  page.append(h('div', { class: 'goal adder' }, h('span', { class: 'box', style: 'border-style:dashed;opacity:.5' }), add));
+
+  const open = list.filter(x => !x.done);
+  page.append(h('div', { class: 'tctrl', style: 'margin:18px 0 0 40px' },
+    open.length && d < n ? h('button', { class: 'btn small', onclick: () => {
+      M.todos[d + 1] = [...(M.todos[d + 1] || []), ...open];
+      M.todos[d] = list.filter(x => x.done); if (!M.todos[d].length) delete M.todos[d];
+      save(); render(); toast(`Moved ${open.length} to tomorrow`);
+    } }, '→ move unfinished to tomorrow') : null,
+    !NATIVE && open.some(x => x.time) ? h('button', { class: 'btn small', onclick: () => exportDayTodos(d) }, '📅 add timed ones to Calendar') : null,
+    h('button', { class: 'btn small', onclick: openReminders }, '🔔 reminders')));
+
+  main.append(strip);
+  if (NATIVE && !settings().asked) main.append(h('div', { class: 'banner' },
+    h('span', { class: 'grow' }, '🔔 Get reminders for your to-dos and daily check-ins?'),
+    h('button', { class: 'btn small primary', onclick: async () => { settings().asked = true; await enableNativeReminders(); save(); render(); } }, 'Turn on'),
+    h('button', { class: 'x', 'aria-label': 'Dismiss', onclick: () => { settings().asked = true; save(); render(); } }, '×')));
+  main.append(page);
+  requestAnimationFrame(() => {
+    const on = $('.dchip.on', strip);
+    if (on) strip.scrollLeft = on.offsetLeft - strip.clientWidth / 2 + on.offsetWidth / 2;
+  });
+}
+
+function todoRow(M, d, item) {
+  const timeIn = h('input', { type: 'time', value: item.time || '', 'aria-label': 'Reminder time',
+    onchange: e => { item.time = e.target.value || null; save(); render(); } });
+  return h('div', { class: 'goal todo' + (item.done ? ' done' : '') },
+    h('button', { class: 'box', 'aria-label': 'Done', onclick: () => { item.done = !item.done; save(); render(); } }, item.done ? checkIcon() : null),
+    h('input', { class: 'gtext', value: item.text, maxlength: 80, oninput: e => { item.text = e.target.value; save(); } }),
+    h('label', { class: 'timechip' + (item.time ? ' set' : '') }, h('span', {}, item.time ? fmtTime(item.time) : '⏰'), timeIn),
+    h('button', { class: 'x', 'aria-label': 'Delete', onclick: () => {
+      M.todos[d] = (M.todos[d] || []).filter(x => x !== item); if (!M.todos[d].length) delete M.todos[d]; save(); render();
+    } }, '×'));
+}
+
+/* ---------- REMINDERS ---------- */
+function settings() {
+  return (state.settings ||= { nudges: ['09:00', '14:00', '20:00'], notify: true });
+}
+const isIOS = /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+
+async function nativePerm() {
+  try { return (await LN.checkPermissions()).display; } catch { return 'denied'; }
+}
+async function enableNativeReminders() {
+  const S = settings();
+  let p = await nativePerm();
+  if (p !== 'granted') { try { p = (await LN.requestPermissions()).display; } catch { p = 'denied'; } }
+  if (p === 'granted') { S.notify = true; save(); syncNative(); toast('Reminders on ✓'); }
+  else toast('Reminders are blocked in your phone settings');
+  return p;
+}
+function openReminders() {
+  const S = settings();
+  const wrap = h('div', {});
+  let nperm = 'prompt';
+  const draw = () => {
+    if (NATIVE) {
+      let part;
+      if (nperm === 'granted') part = h('div', { class: 'tctrl' },
+        h('button', { class: 'segb' + (S.notify ? ' on' : ''), onclick: () => { S.notify = !S.notify; save(); syncNative(); draw(); } }, S.notify ? 'On ✓' : 'Off'),
+        h('button', { class: 'btn small', onclick: async () => {
+          await LN.schedule({ notifications: [{ id: 99999, title: 'Planner test 🔔', body: 'Reminders are working', schedule: { at: new Date(Date.now() + 4000), allowWhileIdle: true } }] });
+          toast('Test coming in a few seconds');
+        } }, 'Send a test'));
+      else if (nperm === 'denied') part = h('div', { class: 'hint' }, 'Notifications are blocked. Turn them on in your phone Settings → Apps → Planner → Notifications.');
+      else part = h('button', { class: 'btn small primary', onclick: async () => { nperm = await enableNativeReminders(); draw(); } }, 'Turn on reminders');
+      put(wrap,
+        nudgeEditor(S, draw),
+        h('label', { class: 'lbl' }, 'Notifications'),
+        h('div', { class: 'hint' }, 'You’ll get a reminder at each to-do’s time and at your check-in times, even when the app is closed. They’re set a week ahead and refresh whenever you open the app.'),
+        part);
+      return;
+    }
+
+    const hasN = 'Notification' in window;
+    const perm = hasN ? Notification.permission : 'none';
+    let notifPart;
+    if (!hasN) notifPart = h('div', { class: 'hint' }, isIOS
+      ? 'On iPhone this only works when the planner is opened from its Home Screen icon (not inside Safari).'
+      : 'This browser can’t show notifications — use the Calendar option below.');
+    else if (perm === 'granted') notifPart = h('div', { class: 'tctrl' },
+      h('button', { class: 'segb' + (S.notify ? ' on' : ''), onclick: () => { S.notify = !S.notify; save(); draw(); } }, S.notify ? 'On ✓' : 'Off'),
+      h('button', { class: 'btn small', onclick: () => notify('Planner test 🔔', 'Notifications are working') }, 'Send a test'));
+    else if (perm === 'denied') notifPart = h('div', { class: 'hint' }, 'Blocked. Allow them in your phone Settings → Notifications → Planner.');
+    else notifPart = h('button', { class: 'btn small primary', onclick: async () => {
+      const r = await Notification.requestPermission();
+      if (r === 'granted') { S.notify = true; save(); notify('Planner 🔔', 'Reminders are on'); }
+      draw();
+    } }, 'Turn on notifications');
+
+    put(wrap,
+      nudgeEditor(S, draw),
+      h('label', { class: 'lbl' }, 'Option 1 · Pop-up notifications'),
+      h('div', { class: 'hint' }, 'For check-ins and to-dos with a time. They show while the planner is open or was used recently. Your phone pauses it once it’s fully closed.'),
+      notifPart,
+      h('label', { class: 'lbl' }, 'Option 2 · Add to your phone’s Calendar (works even when closed)'),
+      h('div', { class: 'hint' }, 'Adds the check-ins as repeating daily events with an alert. Do it again if you change the times.'),
+      h('div', { class: 'tctrl' },
+        h('button', { class: 'btn small primary', onclick: exportCheckins }, '📅 Add check-ins to Calendar'),
+        h('button', { class: 'btn small', onclick: () => exportCheckins(true) }, 'share file instead')));
+  };
+  draw();
+  sheet('Reminders', wrap);
+  if (NATIVE) nativePerm().then(p => { nperm = p; draw(); });
+}
+function nudgeEditor(S, draw) {
+  return [
+    h('label', { class: 'lbl' }, 'Daily check-ins'),
+    h('div', { class: 'hint' }, 'A nudge at these times to look at what’s left on your to-do list.'),
+    h('div', { class: 'tctrl' },
+      S.nudges.map((t, i) => h('span', { class: 'nudge' },
+        h('label', { class: 'timechip set' }, h('span', {}, fmtTime(t)),
+          h('input', { type: 'time', value: t, onchange: e => { if (e.target.value) { S.nudges[i] = e.target.value; S.nudges.sort(); save(); } draw(); } })),
+        h('button', { class: 'x', 'aria-label': 'Remove', onclick: () => { S.nudges.splice(i, 1); save(); draw(); } }, '×'))),
+      h('button', { class: 'btn small', onclick: () => { S.nudges.push('12:00'); S.nudges.sort(); save(); draw(); } }, '+ time'))];
+}
+
+/* real scheduled reminders in the native app */
+let syncTimer;
+function scheduleSync() { if (!NATIVE) return; clearTimeout(syncTimer); syncTimer = setTimeout(syncNative, 1500); }
+const atTime = (day, t) => { const [hh, mm] = t.split(':').map(Number); return new Date(day.getFullYear(), day.getMonth(), day.getDate(), hh, mm); };
+async function syncNative() {
+  if (!NATIVE) return;
+  const S = settings();
+  try {
+    if ((await nativePerm()) !== 'granted') return;
+    const pend = await LN.getPending();
+    const old = (pend.notifications || []).filter(n => n.id !== 99999);
+    if (old.length) await LN.cancel({ notifications: old.map(n => ({ id: n.id })) });
+    if (!S.notify) return;
+    const now = new Date(), list = [];
+    for (let i = 0; i < 7; i++) {
+      const day = new Date(now.getFullYear(), now.getMonth(), now.getDate() + i);
+      const M = state.months[keyOf(day.getFullYear(), day.getMonth())];
+      const todos = (M && M.todos && M.todos[day.getDate()]) || [];
+      const left = todos.filter(x => !x.done);
+      for (const it of left) if (it.time) {
+        const at = atTime(day, it.time);
+        if (at > now) list.push({ prio: 0, at, title: '⏰ ' + (it.text || 'To-do'), body: 'From your planner' });
+      }
+      if (todos.length && !left.length) continue; // everything done that day, no nudges
+      for (const t of S.nudges) {
+        const at = atTime(day, t);
+        if (at <= now) continue;
+        list.push({ prio: 1, at,
+          title: left.length ? `${left.length} thing${left.length > 1 ? 's' : ''} left today` : 'Planner check-in ✎',
+          body: left.length ? left.slice(0, 4).map(x => '• ' + x.text).join('\n') : 'Take a minute to plan your day.' });
+      }
+    }
+    // iPhone allows 64 pending reminders: keep timed to-dos first, then the nearest check-ins
+    const chosen = list.sort((a, b) => a.prio - b.prio || a.at - b.at).slice(0, 60).sort((a, b) => a.at - b.at);
+    if (chosen.length) await LN.schedule({ notifications: chosen.map((x, i) => ({
+      id: i + 1, title: x.title, body: x.body, schedule: { at: x.at, allowWhileIdle: true } })) });
+  } catch (e) { console.warn('reminder sync failed', e); }
+}
+
+/* notifications while the app is alive */
+let fired = new Set();
+try { fired = new Set(JSON.parse(localStorage.getItem('planner-fired') || '[]')); } catch {}
+function markFired(k) {
+  fired.add(k);
+  try { localStorage.setItem('planner-fired', JSON.stringify([...fired].slice(-300))); } catch {}
+}
+async function notify(title, body) {
+  try {
+    const reg = 'serviceWorker' in navigator && await navigator.serviceWorker.getRegistration();
+    if (reg) { await reg.showNotification(title, { body, icon: 'icons/icon-192.png', badge: 'icons/icon-192.png', tag: title }); return; }
+  } catch {}
+  try { new Notification(title, { body, icon: 'icons/icon-192.png' }); } catch {}
+  if (!document.hidden) toast(title);
+}
+function tick() {
+  if (NATIVE) return;
+  const S = settings();
+  if (!S.notify || !('Notification' in window) || Notification.permission !== 'granted') return;
+  const n = new Date(), k = keyOf(n.getFullYear(), n.getMonth()), d = n.getDate();
+  const mins = n.getHours() * 60 + n.getMinutes();
+  const toMin = t => { const [a, b] = t.split(':').map(Number); return a * 60 + b; };
+  const due = t => mins >= toMin(t) && mins - toMin(t) <= 10;
+  const M = state.months[k];
+  const list = (M && M.todos && M.todos[d]) || [];
+  const tag = `${k}-${d}`;
+  for (const it of list) {
+    const key = `${tag}|${it.id}|${it.time}`;
+    if (it.time && !it.done && due(it.time) && !fired.has(key)) { markFired(key); notify('⏰ ' + (it.text || 'To-do'), 'From your planner'); }
+  }
+  for (const t of S.nudges) {
+    const key = `${tag}|nudge|${t}`;
+    if (!due(t) || fired.has(key)) continue;
+    markFired(key);
+    const left = list.filter(x => !x.done);
+    if (left.length) notify(`${left.length} thing${left.length > 1 ? 's' : ''} left today`, left.slice(0, 4).map(x => '• ' + x.text).join('\n'));
+  }
+}
+setInterval(tick, 20000);
+document.addEventListener('visibilitychange', tick);
+
+/* calendar (.ics) export */
+const pad2 = x => String(x).padStart(2, '0');
+const icsEsc = s => String(s).replace(/\\/g, '\\\\').replace(/\r?\n/g, '\\n').replace(/[,;]/g, m => '\\' + m);
+const icsLocal = t => `${t.getFullYear()}${pad2(t.getMonth() + 1)}${pad2(t.getDate())}T${pad2(t.getHours())}${pad2(t.getMinutes())}00`;
+function icsEvent({ id, start, title, desc, rrule }) {
+  const end = new Date(start.getTime() + 10 * 60000);
+  const stamp = new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d+/, '');
+  return ['BEGIN:VEVENT', `UID:${id}@notebook-planner`, `DTSTAMP:${stamp}`, `DTSTART:${icsLocal(start)}`, `DTEND:${icsLocal(end)}`,
+    rrule && `RRULE:${rrule}`, `SUMMARY:${icsEsc(title)}`, desc && `DESCRIPTION:${icsEsc(desc)}`,
+    'BEGIN:VALARM', 'ACTION:DISPLAY', `DESCRIPTION:${icsEsc(title)}`, 'TRIGGER:PT0S', 'END:VALARM', 'END:VEVENT'].filter(Boolean);
+}
+function icsFile(events) {
+  return ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Notebook Planner//EN', 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH', ...events.flat(), 'END:VCALENDAR'].join('\r\n') + '\r\n';
+}
+async function deliverIcs(text, fname, share) {
+  const file = new File([text], fname, { type: 'text/calendar' });
+  if (share) {
+    try { if (navigator.canShare && navigator.canShare({ files: [file] })) { await navigator.share({ files: [file] }); return; } } catch (e) { if (e.name === 'AbortError') return; }
+  }
+  if (isIOS && !share) {
+    const url = 'data:text/calendar;charset=utf-8,' + encodeURIComponent(text);
+    const w = window.open(url, '_blank');
+    if (!w) location.href = url;
+    return;
+  }
+  const a = h('a', { href: URL.createObjectURL(file), download: fname });
+  document.body.append(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1500);
+  toast('Open the downloaded file to add it to your calendar');
+}
+function exportCheckins(share) {
+  const S = settings();
+  if (!S.nudges.length) return toast('Add a check-in time first');
+  const base = new Date();
+  const evs = S.nudges.map(t => {
+    const [hh, mm] = t.split(':').map(Number);
+    return icsEvent({ id: 'checkin-' + t.replace(':', ''), start: new Date(base.getFullYear(), base.getMonth(), base.getDate(), hh, mm),
+      title: '✓ Check your planner', desc: 'Open your planner and look at today’s to-do list.', rrule: 'FREQ=DAILY' });
+  });
+  deliverIcs(icsFile(evs), 'planner-check-ins.ics', share === true);
+}
+function exportDayTodos(d) {
+  const M = month();
+  const items = (M.todos[d] || []).filter(x => x.time && !x.done);
+  if (!items.length) return toast('No to-dos with a time');
+  const evs = items.map(it => {
+    const [hh, mm] = it.time.split(':').map(Number);
+    return icsEvent({ id: it.id, start: new Date(ui.y, ui.m, d, hh, mm), title: '⏰ ' + it.text, desc: 'From your planner' });
+  });
+  deliverIcs(icsFile(evs), `planner-todo-${ui.y}-${pad2(ui.m + 1)}-${pad2(d)}.ics`, false);
+}
+
 /* ---------- GOALS ---------- */
 function renderGoals(main) {
   const M = month();
@@ -437,9 +754,24 @@ function noteBlock(M, b, i) {
 }
 
 /* ---------- sheet (bottom modal) ---------- */
+const openSheets = [];
+let ignorePop = 0;
+window.addEventListener('popstate', () => {
+  if (ignorePop) { ignorePop--; return; }
+  const top = openSheets[openSheets.length - 1];
+  if (top) top(true);
+});
 function sheet(title, content) {
   const ov = h('div', { class: 'overlay' });
-  const close = () => { ov.remove(); };
+  const close = fromPop => {
+    if (!ov.isConnected) return;
+    ov.remove();
+    const i = openSheets.indexOf(close);
+    if (i >= 0) openSheets.splice(i, 1);
+    if (fromPop !== true) { ignorePop++; history.back(); }
+  };
+  openSheets.push(close);
+  try { history.pushState({ sheet: openSheets.length }, ''); } catch {}
   const panel = h('div', { class: 'sheet', role: 'dialog' },
     h('div', { class: 'sheethead' }, h('h3', {}, title), h('button', { class: 'x', 'aria-label': 'Close', onclick: close }, '×')),
     content);
@@ -531,6 +863,7 @@ function openDoodleEditor({ title = 'Doodle', img = null, name = '', withName = 
 /* ---------- menu ---------- */
 function openMenu() {
   const close = sheet('Notebook', h('div', { class: 'menu-list' },
+    h('button', { onclick: () => { close(); openReminders(); } }, 'Reminders', h('small', {}, 'Daily check-ins, notifications, Calendar')),
     h('button', { onclick: () => { close(); openDoodleLibrary(); } }, 'My doodles', h('small', {}, 'Edit, rename or delete your stamps')),
     h('button', { onclick: () => { close(); copyFromPrev(); } }, 'Copy last month’s setup', h('small', {}, 'Trackers & goals into this month')),
     h('button', { onclick: () => { close(); exportBackup(); } }, 'Save backup', h('small', {}, 'Download everything as one file — do this now and then')),
@@ -560,6 +893,13 @@ function openDoodleLibrary() {
 async function exportBackup() {
   const json = JSON.stringify({ app: 'notebook-planner', exported: new Date().toISOString(), state });
   const fname = `planner-backup-${new Date().toISOString().slice(0, 10)}.json`;
+  if (NATIVE) {
+    try {
+      const r = await FS.writeFile({ path: fname, data: json, directory: 'CACHE', encoding: 'utf8' });
+      await SH.share({ title: 'Planner backup', files: [r.uri] });
+    } catch (e) { if (!/cancel/i.test(String(e && e.message))) toast('Could not save the backup'); }
+    return;
+  }
   const file = new File([json], fname, { type: 'application/json' });
   try {
     if (navigator.canShare && navigator.canShare({ files: [file] })) { await navigator.share({ files: [file], title: 'Planner backup' }); return; }
@@ -587,10 +927,13 @@ function openHelp() {
     h('li', {}, 'Tap the little dot next to a day to stamp a doodle on it (draw your own — e.g. a blood drop for the day your period started).'),
     h('li', {}, 'Tap + at the top right of the table to add a tracker column: a tick, number, letter, word or your own doodle.'),
     h('li', {}, 'Tap a tracker’s name to rename, move or delete it.'),
+    h('li', {}, 'To-do: a list for each day. Tap a day number on the Days page to jump to its to-do list. Add a time with ⏰ to get reminded.'),
+    h('li', {}, NATIVE ? 'Reminders (in the menu): set your daily check-in times and turn on notifications.' : 'Reminders (in the menu): set daily check-in times, turn on notifications, or add them to your phone’s Calendar so they alert you even when the planner is closed.'),
     h('li', {}, 'Goals: list what you want this month and tick them off later.'),
     h('li', {}, 'Notes: free page with text, tables and mini doodles.'),
     h('li', {}, 'Tap the month name to jump back to today.'),
-    h('li', {}, 'Everything is stored only on this phone — use “Save backup” from the menu every so often.')));
+    h('li', {}, 'Everything is stored only on this phone — use “Save backup” from the menu every so often.'),
+    NATIVE && h('li', {}, 'Moving from the web version? Save a backup there, then use “Restore backup” here.')));
 }
 
 /* ---------- boot ---------- */
@@ -598,8 +941,10 @@ function openHelp() {
   const s = await loadState();
   if (s && s.months) state = s;
   render(false);
+  setTimeout(tick, 1500);
   if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
-  if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
+  if (NATIVE) { syncNative(); document.addEventListener('visibilitychange', () => { if (!document.hidden) syncNative(); }); }
+  else if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
     navigator.serviceWorker.register('sw.js').catch(() => {});
   }
 })();

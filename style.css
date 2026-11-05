@@ -1,3 +1,6 @@
+@font-face{font-family:'Caveat';font-weight:500;font-style:normal;font-display:swap;src:url(fonts/caveat-latin-500-normal.woff2) format('woff2')}
+@font-face{font-family:'Caveat';font-weight:700;font-style:normal;font-display:swap;src:url(fonts/caveat-latin-700-normal.woff2) format('woff2')}
+@font-face{font-family:'Patrick Hand';font-weight:400;font-style:normal;font-display:swap;src:url(fonts/patrick-hand-latin-400-normal.woff2) format('woff2')}
 :root{
   --paper:#fbf7ee;
   --paper-2:#f4eedf;
@@ -176,3 +179,26 @@ table.ntable{border-collapse:collapse;background:rgba(255,255,255,.75)}
 .days tbody td{vertical-align:top}
 tbody .c-day{line-height:var(--row)}
 .markbtn{margin:2px auto 0}
+
+/* ---------- to-do ---------- */
+.tab{font-size:17px}
+.daystrip{position:sticky;top:0;z-index:4;display:flex;gap:6px;overflow-x:auto;padding:10px 12px;background:var(--paper);border-bottom:1px solid var(--line);scrollbar-width:none}
+.daystrip::-webkit-scrollbar{display:none}
+.dchip{flex:none;width:46px;padding:6px 0 5px;border-radius:14px;border:1.5px solid var(--line-strong);background:#fff;display:flex;flex-direction:column;align-items:center;line-height:1.1;position:relative}
+.dchip b{font-weight:normal;font-size:19px}
+.dchip span{font-size:12px;color:var(--muted)}
+.dchip.today{border-color:var(--accent)}
+.dchip.on{background:var(--ink);border-color:var(--ink);color:#fff}
+.dchip.on span{color:#d6d9df}
+.pip{position:absolute;top:5px;right:5px;width:7px;height:7px;border-radius:50%;background:var(--accent)}
+.pip.done{background:#3aa76d}
+tbody .c-day{cursor:pointer}
+.c-day .pip{top:6px;right:4px;width:6px;height:6px}
+.timechip{position:relative;flex:none;min-width:40px;height:30px;padding:0 9px;border-radius:999px;border:1.5px dashed var(--line-strong);display:inline-grid;place-items:center;font-size:14px;color:var(--muted);overflow:hidden;background:transparent;white-space:nowrap}
+.timechip.set{border-style:solid;border-color:var(--blue);color:var(--blue);background:#fff}
+.timechip input{position:absolute;inset:0;opacity:0;width:100%;height:100%;border:0;margin:0;padding:0;-webkit-appearance:none;appearance:none}
+.goal.todo.done .timechip{opacity:.4}
+.nudge{display:inline-flex;align-items:center}
+.nudge .x{width:26px}
+.gtext{min-width:0}
+.page,.notes{max-width:100vw;overflow-x:hidden}
