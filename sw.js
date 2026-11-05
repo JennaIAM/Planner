@@ -1,8 +1,9 @@
 // Offline support. Bump VERSION when you change any app file.
-const VERSION = 'planner-v5';
+const VERSION = 'planner-v6';
 const SHELL = ['./', './index.html', './style.css', './app.js', './manifest.webmanifest',
   './icons/icon-192.png', './icons/icon-512.png', './icons/apple-touch-icon.png',
-  './vendor/capacitor.js', './fonts/caveat-latin-500-normal.woff2', './fonts/caveat-latin-700-normal.woff2', './fonts/patrick-hand-latin-400-normal.woff2'];
+  './vendor/capacitor.js', './fonts/gaegu-latin-300-normal.woff2', './fonts/annie-use-your-telescope-latin-400-normal.woff2',
+  './fonts/shadows-into-light-two-latin-400-normal.woff2', './fonts/coming-soon-latin-400-normal.woff2', './privacy.html'];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(VERSION).then(c => c.addAll(SHELL)).then(() => self.skipWaiting()));

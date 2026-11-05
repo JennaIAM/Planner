@@ -1,17 +1,17 @@
 'use strict';
 /* ============ Notebook Planner ============
-   All data lives on this device (IndexedDB). Use ☰ → Save backup now and then. */
+   All data lives on this device (IndexedDB). Use the menu > Save backup now and then. */
 
 const DAY_ABBR = ['Su', 'M', 'Tu', 'W', 'Th', 'F', 'Sa'];
 const DAY_FULL = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
 const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 const COLORS = ['#2f3542','#b0201b','#e84a5f','#f48fb1','#ef8b2c','#f2c418','#3aa76d','#2e86de','#8e5cc9','#8d6e63','#9aa0a6','#ffffff'];
 const TYPES = [
-  { id: 'check',  label: '✓ Check'  },
-  { id: 'number', label: '# Number' },
-  { id: 'letter', label: 'A Letter' },
-  { id: 'word',   label: 'Aa Word'  },
-  { id: 'doodle', label: '✎ Doodle' },
+  { id: 'check',  label: 'Tick'   },
+  { id: 'number', label: 'Number' },
+  { id: 'letter', label: 'Letter' },
+  { id: 'word',   label: 'Word'   },
+  { id: 'doodle', label: 'Doodle' },
 ];
 const ENTRY_MAX = 80;
 function growEntry(el) { el.style.height = 'auto'; el.style.height = el.scrollHeight + 'px'; }
@@ -37,7 +37,20 @@ function h(tag, attrs, ...kids) {
 }
 const put = (el, ...kids) => el.replaceChildren(...kids.flat(9).filter(k => k != null && k !== false));
 const uid = () => Math.random().toString(36).slice(2, 8) + Date.now().toString(36).slice(-5);
-const CHECK_SVG = '<svg viewBox="0 0 24 24"><path d="M4 13.5c2 1.6 3.4 3.2 4.8 5.6C11.6 12.8 15.4 8 20.5 4" fill="none" stroke="currentColor" stroke-width="2.7" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+const CHECK_SVG = '<svg viewBox="0 0 24 24"><path d="M4.5 13c1.8 1.4 3.2 3 4.4 5.2C11.5 12.6 15.2 8 20 4.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+const ICONS = {
+  chevL: '<path d="M15 5l-7 7 7 7"/>',
+  chevR: '<path d="M9 5l7 7-7 7"/>',
+  menu: '<path d="M4 7h16M4 12h16M4 17h16"/>',
+  x: '<path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/>',
+  plus: '<path d="M12 5v14M5 12h14"/>',
+  clock: '<circle cx="12" cy="12" r="8"/><path d="M12 7.5V12l3 2"/>',
+  up: '<path d="M12 19V5M6.5 10.5L12 5l5.5 5.5"/>',
+  down: '<path d="M12 5v14M6.5 13.5L12 19l5.5-5.5"/>',
+  trash: '<path d="M5 7h14M10 7V5h4v2M7 7l1 12h8l1-12"/>',
+  star: '<path d="M12 4.5l2.2 4.6 5 .6-3.7 3.4 1 5-4.5-2.5-4.5 2.5 1-5-3.7-3.4 5-.6z"/>',
+};
+const ic = name => h('span', { class: 'ic', html: `<svg viewBox="0 0 24 24">${ICONS[name]}</svg>` });
 const checkIcon = () => h('span', { html: CHECK_SVG, style: 'display:contents' });
 
 function toast(msg) {
@@ -141,11 +154,11 @@ function render(keepScroll = true) {
 
 function header() {
   return h('header', { class: 'top' },
-    h('button', { class: 'icon', 'aria-label': 'Previous month', onclick: () => shift(-1) }, '‹'),
+    h('button', { class: 'icon', 'aria-label': 'Previous month', onclick: () => shift(-1) }, ic('chevL')),
     h('div', { class: 'title', onclick: goToday, title: 'Go to today' },
       h('span', { class: 'mname' }, MONTHS[ui.m]), h('span', { class: 'year' }, ui.y)),
-    h('button', { class: 'icon', 'aria-label': 'Next month', onclick: () => shift(1) }, '›'),
-    h('button', { class: 'icon menu', 'aria-label': 'Menu', onclick: openMenu }, '☰'));
+    h('button', { class: 'icon', 'aria-label': 'Next month', onclick: () => shift(1) }, ic('chevR')),
+    h('button', { class: 'icon menu', 'aria-label': 'Menu', onclick: openMenu }, ic('menu')));
 }
 function shift(n) {
   const d = new Date(ui.y, ui.m + n, 1);
@@ -173,14 +186,14 @@ function copyBanner() {
   return h('div', { class: 'banner' },
     h('span', { class: 'grow' }, `Reuse ${MONTHS[d.getMonth()]}'s trackers & goals?`),
     h('button', { class: 'btn small primary', onclick: copyFromPrev }, 'Copy'),
-    h('button', { class: 'x', 'aria-label': 'Dismiss', onclick: () => { M.noCopy = true; save(); render(); } }, '×'));
+    h('button', { class: 'x', 'aria-label': 'Dismiss', onclick: () => { M.noCopy = true; save(); render(); } }, ic('x')));
 }
 function copyFromPrev() {
   const M = month(), P = state.months[prevKey()];
   if (!P) return toast('Nothing in last month');
   for (const t of P.trackers) if (!M.trackers.some(x => x.name === t.name)) M.trackers.push({ ...t, id: uid() });
   for (const g of P.goals) if (!M.goals.some(x => x.text === g.text)) M.goals.push({ id: uid(), text: g.text, done: false });
-  save(); render(); toast('Copied ✓');
+  save(); render(); toast('Copied');
 }
 
 /* ---------- DAYS ---------- */
@@ -194,11 +207,11 @@ function renderDays(main) {
 
   const headRow = h('tr', {},
     h('th', { class: 'c-day' }, ''),
-    h('th', { class: 'c-mark' }, '✦'),
+    h('th', { class: 'c-mark' }, ic('star')),
     h('th', { class: 'c-entry', style: 'text-align:left;padding-left:8px' }, 'one line a day'),
     M.trackers.map(tr => h('th', { class: 'c-trk' + (tr.type === 'word' ? ' wide' : ''), onclick: () => editTracker(tr) },
       h('span', { class: 'trkname' }, tr.title === 'doodle' && tr.titleImg ? h('img', { src: tr.titleImg, alt: tr.name || 'tracker' }) : (tr.name || '—')))),
-    h('th', { class: 'c-add' }, h('button', { class: 'addtrk', 'aria-label': 'Add tracker', onclick: () => editTracker(null) }, '+')));
+    h('th', { class: 'c-add' }, h('button', { class: 'addtrk', 'aria-label': 'Add tracker', onclick: () => editTracker(null) }, ic('plus'))));
 
   const body = h('tbody', {});
   for (let d = 1; d <= n; d++) {
@@ -276,7 +289,7 @@ function openMarkSheet(d, refresh) {
       h('button', { class: 'stamp new', onclick: () => openDoodleEditor({
         title: 'Draw a new mark', withName: true, namePh: 'e.g. period, gym, trip',
         onSave: (img, name) => { const id = uid(); state.doodles[id] = { img, name }; M.marks[d] = [...(M.marks[d] || []), id]; save(); draw(); refresh(); },
-      }) }, h('span', { class: 'plus' }, '+'), h('span', {}, 'Draw new')));
+      }) }, h('span', { class: 'plus' }, ic('plus')), h('span', {}, 'Draw new')));
   };
   draw();
   sheet(`${d} ${DAY_ABBR[wd]} · marks`, [
@@ -308,7 +321,7 @@ function editTracker(tr) {
         h('button', { class: 'stamp new', onclick: () => openDoodleEditor({
           title: 'Draw tracker doodle', withName: true, name: name.value, namePh: 'name it',
           onSave: (img, nm) => { const id = uid(); state.doodles[id] = { img, name: nm }; t.doodle = id; save(); drawDoodle(); },
-        }) }, h('span', { class: 'plus' }, '+'), h('span', {}, 'Draw new'))));
+        }) }, h('span', { class: 'plus' }, ic('plus')), h('span', {}, 'Draw new'))));
   };
   drawTypes(); drawDoodle();
 
@@ -317,13 +330,13 @@ function editTracker(tr) {
   const titleSeg = h('div', { class: 'seg' });
   const titleRow = h('div', {});
   const drawTitle = () => {
-    put(titleSeg, [['text', 'Aa Words'], ['doodle', '✎ Draw it']].map(([id, l]) =>
+    put(titleSeg, [['text', 'Words'], ['doodle', 'Draw it']].map(([id, l]) =>
       h('button', { class: 'segb' + (t.title === id ? ' on' : ''), onclick: () => { t.title = id; drawTitle(); if (id === 'doodle' && !t.titleImg) drawTitleImg(); } }, l)));
     nameLbl.textContent = t.title === 'doodle' ? 'Name (only for you, not shown)' : 'Name';
     if (t.title !== 'doodle') return put(titleRow);
     put(titleRow, h('div', { class: 'stampgrid', style: 'margin-top:8px' },
       h('button', { class: 'stamp' + (t.titleImg ? ' on' : ' new'), onclick: drawTitleImg },
-        t.titleImg ? h('img', { src: t.titleImg, alt: '' }) : h('span', { class: 'plus' }, '+'),
+        t.titleImg ? h('img', { src: t.titleImg, alt: '' }) : h('span', { class: 'plus' }, ic('plus')),
         h('span', {}, t.titleImg ? 'redraw' : 'Draw title'))));
   };
   const drawTitleImg = () => openDoodleEditor({
@@ -347,8 +360,8 @@ function editTracker(tr) {
         if (!confirm(`Delete "${t.name}" and its ticks for this month?`)) return;
         M.trackers = M.trackers.filter(x => x.id !== t.id); delete M.values[t.id]; save(); close(); render();
       } }, 'Delete'),
-      !isNew && idx > 0 && h('button', { class: 'btn small', onclick: () => move(-1) }, '← move'),
-      !isNew && idx < M.trackers.length - 1 && h('button', { class: 'btn small', onclick: () => move(1) }, 'move →'),
+      !isNew && idx > 0 && h('button', { class: 'btn small', onclick: () => move(-1) }, 'Move left'),
+      !isNew && idx < M.trackers.length - 1 && h('button', { class: 'btn small', onclick: () => move(1) }, 'Move right'),
       h('span', { class: 'spacer' }),
       h('button', { class: 'btn primary', onclick: () => {
         t.name = name.value.trim();
@@ -402,7 +415,7 @@ function renderTodo(main) {
   const doneN = list.filter(x => x.done).length;
   const page = h('div', { class: 'page' },
     h('h2', {}, `${DAY_FULL[wd]} ${d}`, list.length ? h('span', { class: 'progress' }, `${doneN}/${list.length}`) : null),
-    h('p', { class: 'sub' }, 'Your to-do list for the day. Tap ⏰ to add a reminder time.'));
+    h('p', { class: 'sub' }, 'Your to-do list for the day. Tap the clock to add a reminder time.'));
   for (const item of list) page.append(todoRow(M, d, item));
 
   const add = h('input', { class: 'gtext', placeholder: '+ add a to-do…', maxlength: 80, enterkeyhint: 'done' });
@@ -417,20 +430,20 @@ function renderTodo(main) {
   page.append(h('div', { class: 'goal adder' }, h('span', { class: 'box', style: 'border-style:dashed;opacity:.5' }), add));
 
   const open = list.filter(x => !x.done);
-  page.append(h('div', { class: 'tctrl', style: 'margin:18px 0 0 40px' },
+  page.append(h('div', { class: 'tctrl', style: 'margin:1.1rem 0 0 2.5rem' },
     open.length && d < n ? h('button', { class: 'btn small', onclick: () => {
       M.todos[d + 1] = [...(M.todos[d + 1] || []), ...open];
       M.todos[d] = list.filter(x => x.done); if (!M.todos[d].length) delete M.todos[d];
       save(); render(); toast(`Moved ${open.length} to tomorrow`);
-    } }, '→ move unfinished to tomorrow') : null,
-    !NATIVE && open.some(x => x.time) ? h('button', { class: 'btn small', onclick: () => exportDayTodos(d) }, '📅 add timed ones to Calendar') : null,
-    h('button', { class: 'btn small', onclick: openReminders }, '🔔 reminders')));
+    } }, 'Move unfinished to tomorrow') : null,
+    !NATIVE && open.some(x => x.time) ? h('button', { class: 'btn small', onclick: () => exportDayTodos(d) }, 'Add timed ones to Calendar') : null,
+    h('button', { class: 'btn small', onclick: openReminders }, 'Reminders')));
 
   main.append(strip);
   if (NATIVE && !settings().asked) main.append(h('div', { class: 'banner' },
-    h('span', { class: 'grow' }, '🔔 Get reminders for your to-dos and daily check-ins?'),
+    h('span', { class: 'grow' }, 'Get reminders for your to-dos and daily check-ins?'),
     h('button', { class: 'btn small primary', onclick: async () => { settings().asked = true; await enableNativeReminders(); save(); render(); } }, 'Turn on'),
-    h('button', { class: 'x', 'aria-label': 'Dismiss', onclick: () => { settings().asked = true; save(); render(); } }, '×')));
+    h('button', { class: 'x', 'aria-label': 'Dismiss', onclick: () => { settings().asked = true; save(); render(); } }, ic('x'))));
   main.append(page);
   requestAnimationFrame(() => {
     const on = $('.dchip.on', strip);
@@ -444,10 +457,10 @@ function todoRow(M, d, item) {
   return h('div', { class: 'goal todo' + (item.done ? ' done' : '') },
     h('button', { class: 'box', 'aria-label': 'Done', onclick: () => { item.done = !item.done; save(); render(); } }, item.done ? checkIcon() : null),
     h('input', { class: 'gtext', value: item.text, maxlength: 80, oninput: e => { item.text = e.target.value; save(); } }),
-    h('label', { class: 'timechip' + (item.time ? ' set' : '') }, h('span', {}, item.time ? fmtTime(item.time) : '⏰'), timeIn),
+    h('label', { class: 'timechip' + (item.time ? ' set' : '') }, h('span', {}, item.time ? fmtTime(item.time) : ic('clock')), timeIn),
     h('button', { class: 'x', 'aria-label': 'Delete', onclick: () => {
       M.todos[d] = (M.todos[d] || []).filter(x => x !== item); if (!M.todos[d].length) delete M.todos[d]; save(); render();
-    } }, '×'));
+    } }, ic('x')));
 }
 
 /* ---------- REMINDERS ---------- */
@@ -463,7 +476,7 @@ async function enableNativeReminders() {
   const S = settings();
   let p = await nativePerm();
   if (p !== 'granted') { try { p = (await LN.requestPermissions()).display; } catch { p = 'denied'; } }
-  if (p === 'granted') { S.notify = true; save(); syncNative(); toast('Reminders on ✓'); }
+  if (p === 'granted') { S.notify = true; save(); syncNative(); toast('Reminders on'); }
   else toast('Reminders are blocked in your phone settings');
   return p;
 }
@@ -475,9 +488,9 @@ function openReminders() {
     if (NATIVE) {
       let part;
       if (nperm === 'granted') part = h('div', { class: 'tctrl' },
-        h('button', { class: 'segb' + (S.notify ? ' on' : ''), onclick: () => { S.notify = !S.notify; save(); syncNative(); draw(); } }, S.notify ? 'On ✓' : 'Off'),
+        h('button', { class: 'segb' + (S.notify ? ' on' : ''), onclick: () => { S.notify = !S.notify; save(); syncNative(); draw(); } }, S.notify ? 'On' : 'Off'),
         h('button', { class: 'btn small', onclick: async () => {
-          await LN.schedule({ notifications: [{ id: 99999, title: 'Planner test 🔔', body: 'Reminders are working', schedule: { at: new Date(Date.now() + 4000), allowWhileIdle: true } }] });
+          await LN.schedule({ notifications: [{ id: 99999, title: 'Planner test', body: 'Reminders are working', schedule: { at: new Date(Date.now() + 4000), allowWhileIdle: true } }] });
           toast('Test coming in a few seconds');
         } }, 'Send a test'));
       else if (nperm === 'denied') part = h('div', { class: 'hint' }, 'Notifications are blocked. Turn them on in your phone Settings → Apps → Planner → Notifications.');
@@ -497,12 +510,12 @@ function openReminders() {
       ? 'On iPhone this only works when the planner is opened from its Home Screen icon (not inside Safari).'
       : 'This browser can’t show notifications — use the Calendar option below.');
     else if (perm === 'granted') notifPart = h('div', { class: 'tctrl' },
-      h('button', { class: 'segb' + (S.notify ? ' on' : ''), onclick: () => { S.notify = !S.notify; save(); draw(); } }, S.notify ? 'On ✓' : 'Off'),
-      h('button', { class: 'btn small', onclick: () => notify('Planner test 🔔', 'Notifications are working') }, 'Send a test'));
+      h('button', { class: 'segb' + (S.notify ? ' on' : ''), onclick: () => { S.notify = !S.notify; save(); draw(); } }, S.notify ? 'On' : 'Off'),
+      h('button', { class: 'btn small', onclick: () => notify('Planner test', 'Notifications are working') }, 'Send a test'));
     else if (perm === 'denied') notifPart = h('div', { class: 'hint' }, 'Blocked. Allow them in your phone Settings → Notifications → Planner.');
     else notifPart = h('button', { class: 'btn small primary', onclick: async () => {
       const r = await Notification.requestPermission();
-      if (r === 'granted') { S.notify = true; save(); notify('Planner 🔔', 'Reminders are on'); }
+      if (r === 'granted') { S.notify = true; save(); notify('Planner', 'Reminders are on'); }
       draw();
     } }, 'Turn on notifications');
 
@@ -514,7 +527,7 @@ function openReminders() {
       h('label', { class: 'lbl' }, 'Option 2 · Add to your phone’s Calendar (works even when closed)'),
       h('div', { class: 'hint' }, 'Adds the check-ins as repeating daily events with an alert. Do it again if you change the times.'),
       h('div', { class: 'tctrl' },
-        h('button', { class: 'btn small primary', onclick: exportCheckins }, '📅 Add check-ins to Calendar'),
+        h('button', { class: 'btn small primary', onclick: exportCheckins }, 'Add check-ins to Calendar'),
         h('button', { class: 'btn small', onclick: () => exportCheckins(true) }, 'share file instead')));
   };
   draw();
@@ -529,7 +542,7 @@ function nudgeEditor(S, draw) {
       S.nudges.map((t, i) => h('span', { class: 'nudge' },
         h('label', { class: 'timechip set' }, h('span', {}, fmtTime(t)),
           h('input', { type: 'time', value: t, onchange: e => { if (e.target.value) { S.nudges[i] = e.target.value; S.nudges.sort(); save(); } draw(); } })),
-        h('button', { class: 'x', 'aria-label': 'Remove', onclick: () => { S.nudges.splice(i, 1); save(); draw(); } }, '×'))),
+        h('button', { class: 'x', 'aria-label': 'Remove', onclick: () => { S.nudges.splice(i, 1); save(); draw(); } }, ic('x')))),
       h('button', { class: 'btn small', onclick: () => { S.nudges.push('12:00'); S.nudges.sort(); save(); draw(); } }, '+ time'))];
 }
 
@@ -554,14 +567,14 @@ async function syncNative() {
       const left = todos.filter(x => !x.done);
       for (const it of left) if (it.time) {
         const at = atTime(day, it.time);
-        if (at > now) list.push({ prio: 0, at, title: '⏰ ' + (it.text || 'To-do'), body: 'From your planner' });
+        if (at > now) list.push({ prio: 0, at, title: it.text || 'To-do', body: 'Reminder from your planner' });
       }
       if (todos.length && !left.length) continue; // everything done that day, no nudges
       for (const t of S.nudges) {
         const at = atTime(day, t);
         if (at <= now) continue;
         list.push({ prio: 1, at,
-          title: left.length ? `${left.length} thing${left.length > 1 ? 's' : ''} left today` : 'Planner check-in ✎',
+          title: left.length ? `${left.length} thing${left.length > 1 ? 's' : ''} left today` : 'Planner check-in',
           body: left.length ? left.slice(0, 4).map(x => '• ' + x.text).join('\n') : 'Take a minute to plan your day.' });
       }
     }
@@ -600,7 +613,7 @@ function tick() {
   const tag = `${k}-${d}`;
   for (const it of list) {
     const key = `${tag}|${it.id}|${it.time}`;
-    if (it.time && !it.done && due(it.time) && !fired.has(key)) { markFired(key); notify('⏰ ' + (it.text || 'To-do'), 'From your planner'); }
+    if (it.time && !it.done && due(it.time) && !fired.has(key)) { markFired(key); notify(it.text || 'To-do', 'Reminder from your planner'); }
   }
   for (const t of S.nudges) {
     const key = `${tag}|nudge|${t}`;
@@ -649,7 +662,7 @@ function exportCheckins(share) {
   const evs = S.nudges.map(t => {
     const [hh, mm] = t.split(':').map(Number);
     return icsEvent({ id: 'checkin-' + t.replace(':', ''), start: new Date(base.getFullYear(), base.getMonth(), base.getDate(), hh, mm),
-      title: '✓ Check your planner', desc: 'Open your planner and look at today’s to-do list.', rrule: 'FREQ=DAILY' });
+      title: 'Check your planner', desc: 'Open your planner and look at today’s to-do list.', rrule: 'FREQ=DAILY' });
   });
   deliverIcs(icsFile(evs), 'planner-check-ins.ics', share === true);
 }
@@ -659,7 +672,7 @@ function exportDayTodos(d) {
   if (!items.length) return toast('No to-dos with a time');
   const evs = items.map(it => {
     const [hh, mm] = it.time.split(':').map(Number);
-    return icsEvent({ id: it.id, start: new Date(ui.y, ui.m, d, hh, mm), title: '⏰ ' + it.text, desc: 'From your planner' });
+    return icsEvent({ id: it.id, start: new Date(ui.y, ui.m, d, hh, mm), title: it.text, desc: 'From your planner' });
   });
   deliverIcs(icsFile(evs), `planner-todo-${ui.y}-${pad2(ui.m + 1)}-${pad2(d)}.ics`, false);
 }
@@ -677,7 +690,7 @@ function renderGoals(main) {
     page.append(h('div', { class: 'goal' + (g.done ? ' done' : '') },
       h('button', { class: 'box', 'aria-label': 'Done', onclick: () => { g.done = !g.done; save(); render(); } }, g.done ? checkIcon() : null),
       h('input', { class: 'gtext', value: g.text, maxlength: 80, oninput: e => { g.text = e.target.value; save(); } }),
-      h('button', { class: 'x', 'aria-label': 'Delete goal', onclick: () => { M.goals = M.goals.filter(x => x !== g); save(); render(); } }, '×')));
+      h('button', { class: 'x', 'aria-label': 'Delete goal', onclick: () => { M.goals = M.goals.filter(x => x !== g); save(); render(); } }, ic('x'))));
   }
   const add = h('input', { class: 'gtext', placeholder: '+ add a goal…', maxlength: 80, enterkeyhint: 'done' });
   const commit = (refocus) => {
@@ -696,7 +709,7 @@ function renderGoals(main) {
 function renderNotes(main) {
   const M = month();
   const page = h('div', { class: 'notes' }, h('h2', {}, `${MONTHS[ui.m]} notes`));
-  if (!M.notes.length) page.append(h('div', { class: 'emptynote' }, 'Blank page. Add some text, a table or a little doodle ↓'));
+  if (!M.notes.length) page.append(h('div', { class: 'emptynote' }, 'Blank page. Add some text, a table or a little doodle below.'));
   M.notes.forEach((b, i) => page.append(noteBlock(M, b, i)));
   page.append(h('div', { class: 'addbar' },
     h('button', { class: 'btn', onclick: () => addBlock({ type: 'text', text: '' }) }, '+ Text'),
@@ -711,18 +724,18 @@ function addBlock(b) {
 }
 function noteBlock(M, b, i) {
   const tools = h('div', { class: 'blocktools' },
-    i > 0 && h('button', { 'aria-label': 'Move up', onclick: () => { [M.notes[i - 1], M.notes[i]] = [M.notes[i], M.notes[i - 1]]; save(); render(); } }, '↑'),
-    i < M.notes.length - 1 && h('button', { 'aria-label': 'Move down', onclick: () => { [M.notes[i + 1], M.notes[i]] = [M.notes[i], M.notes[i + 1]]; save(); render(); } }, '↓'),
+    i > 0 && h('button', { 'aria-label': 'Move up', onclick: () => { [M.notes[i - 1], M.notes[i]] = [M.notes[i], M.notes[i - 1]]; save(); render(); } }, ic('up')),
+    i < M.notes.length - 1 && h('button', { 'aria-label': 'Move down', onclick: () => { [M.notes[i + 1], M.notes[i]] = [M.notes[i], M.notes[i + 1]]; save(); render(); } }, ic('down')),
     h('button', { 'aria-label': 'Delete', onclick: () => {
       const empty = (b.type === 'text' && !b.text.trim());
       if (!empty && !confirm('Delete this from your notes?')) return;
       M.notes.splice(i, 1); save(); render();
-    } }, '✕'));
+    } }, ic('trash')));
   const wrap = h('div', { class: 'block' }, tools);
 
   if (b.type === 'text') {
     const ta = h('textarea', { class: 'ntext', rows: 2, placeholder: 'write here…', value: b.text });
-    const grow = () => { ta.style.height = 'auto'; ta.style.height = Math.max(68, Math.ceil(ta.scrollHeight / 34) * 34) + 'px'; };
+    const grow = () => { ta.style.height = 'auto'; const lh = parseFloat(getComputedStyle(ta).lineHeight) || 34; ta.style.height = Math.max(lh * 2, Math.ceil(ta.scrollHeight / lh - 0.01) * lh) + 'px'; };
     ta.addEventListener('input', () => { b.text = ta.value; save(); grow(); });
     requestAnimationFrame(grow);
     wrap.append(ta);
@@ -743,24 +756,32 @@ function noteBlock(M, b, i) {
         onclick: () => openDoodleEditor({ title: 'Edit doodle', img: b.img, size: 400, onSave: img => { b.img = img; save(); render(); } }) }),
       h('div', { class: 'tctrl' },
         Object.entries(sizes).map(([k, l]) => h('button', { class: 'tool' + ((b.size || 'm') === k ? ' on' : ''), onclick: () => { b.size = k; save(); render(); } }, l)),
-        h('button', { class: 'tool', onclick: () => { b.align = (b.align || 'left') === 'left' ? 'center' : 'left'; save(); render(); } }, (b.align || 'left') === 'left' ? '⇤ left' : '↔ center'),
+        h('button', { class: 'tool', onclick: () => { b.align = (b.align || 'left') === 'left' ? 'center' : 'left'; save(); render(); } }, (b.align || 'left') === 'left' ? 'Left' : 'Centre'),
         h('button', { class: 'tool', onclick: () => {
           const name = prompt('Save to your doodle stamps as:', '');
           if (name == null) return;
           state.doodles[uid()] = { img: b.img, name: name.trim() }; save(); toast('Saved to your stamps');
-        } }, '☆ stamp')));
+        } }, 'Save as stamp')));
   }
   return wrap;
 }
 
 /* ---------- sheet (bottom modal) ---------- */
+// One history entry stands for "a sheet is open", so the phone's back button closes sheets
 const openSheets = [];
-let ignorePop = 0;
+let ignorePop = 0, sheetEntry = false;
 window.addEventListener('popstate', () => {
   if (ignorePop) { ignorePop--; return; }
+  sheetEntry = false;
   const top = openSheets[openSheets.length - 1];
   if (top) top(true);
+  if (openSheets.length) { try { history.pushState({ sheet: 1 }, ''); sheetEntry = true; } catch {} }
 });
+function releaseSheetEntry() {
+  setTimeout(() => {
+    if (!openSheets.length && sheetEntry) { sheetEntry = false; ignorePop++; history.back(); }
+  }, 0);
+}
 function sheet(title, content) {
   const ov = h('div', { class: 'overlay' });
   const close = fromPop => {
@@ -768,12 +789,12 @@ function sheet(title, content) {
     ov.remove();
     const i = openSheets.indexOf(close);
     if (i >= 0) openSheets.splice(i, 1);
-    if (fromPop !== true) { ignorePop++; history.back(); }
+    if (fromPop !== true) releaseSheetEntry();
   };
   openSheets.push(close);
-  try { history.pushState({ sheet: openSheets.length }, ''); } catch {}
+  if (!sheetEntry) { try { history.pushState({ sheet: 1 }, ''); sheetEntry = true; } catch {} }
   const panel = h('div', { class: 'sheet', role: 'dialog' },
-    h('div', { class: 'sheethead' }, h('h3', {}, title), h('button', { class: 'x', 'aria-label': 'Close', onclick: close }, '×')),
+    h('div', { class: 'sheethead' }, h('h3', {}, title), h('button', { class: 'x', 'aria-label': 'Close', onclick: close }, ic('x'))),
     content);
   ov.append(panel);
   ov.addEventListener('pointerdown', e => { if (e.target === ov) ov.dataset.down = '1'; });
@@ -836,7 +857,7 @@ function openDoodleEditor({ title = 'Doodle', img = null, name = '', withName = 
       [[7, 6], [14, 11], [26, 17]].map(([w, dot]) => h('button', { class: 'tool' + (width === w ? ' on' : ''), 'aria-label': 'Brush size', onclick: () => { width = w; drawTools(); } },
         h('span', { class: 'sizedot', style: `width:${dot}px;height:${dot}px` }))),
       h('button', { class: 'tool' + (erase ? ' on' : ''), onclick: () => { erase = !erase; drawTools(); } }, 'eraser'),
-      h('button', { class: 'tool', onclick: () => { const s = hist.pop(); if (s) ctx.putImageData(s, 0, 0); } }, '↶ undo'),
+      h('button', { class: 'tool', onclick: () => { const s = hist.pop(); if (s) ctx.putImageData(s, 0, 0); } }, 'Undo'),
       h('button', { class: 'tool', onclick: () => { snap(); ctx.clearRect(0, 0, S, S); } }, 'clear'));
   };
   drawTools();
@@ -853,16 +874,94 @@ function openDoodleEditor({ title = 'Doodle', img = null, name = '', withName = 
         const o = out.getContext('2d'); o.imageSmoothingQuality = 'high'; o.drawImage(c, 0, 0, size, size);
         const px = o.getImageData(0, 0, size, size).data;
         let any = false; for (let i = 3; i < px.length; i += 4) if (px[i] > 8) { any = true; break; }
-        if (!any) return toast('Draw something first ✎');
+        if (!any) return toast('Draw something first');
         onSave(out.toDataURL('image/png'), nameIn ? nameIn.value.trim() : '');
         close();
       } }, 'Save')),
   ]);
 }
 
+/* ---------- look: paper, pen, size ---------- */
+const PENS = [
+  { id: 'fine',  name: 'Fine',  family: "'Pen Fine'",  k: 1.12, tr: '-0.025em' },
+  { id: 'light', name: 'Light', family: "'Pen Light'", k: 1.0 },
+  { id: 'quick', name: 'Quick', family: "'Pen Quick'", k: 0.97 },
+  { id: 'neat',  name: 'Neat',  family: "'Pen Neat'",  k: 0.86 },
+];
+const PAPERS = [['Cream', '#fbf7ee'], ['White', '#ffffff'], ['Grey', '#f0f0ee'], ['Sky', '#edf2f7'], ['Blush', '#f8ecea'],
+  ['Sage', '#ecf1e7'], ['Sand', '#eee3cf'], ['Lilac', '#efecf6'], ['Night', '#25272b']];
+function look() {
+  const S = settings();
+  return (S.look ||= { paper: '#fbf7ee', pen: 'fine', size: 0.9 });
+}
+const hexRgb = hx => { const n = parseInt(hx.slice(1), 16); return [n >> 16 & 255, n >> 8 & 255, n & 255]; };
+const mixRgb = (a, b, t) => '#' + a.map((v, i) => Math.round(v + (b[i] - v) * t).toString(16).padStart(2, '0')).join('');
+let SB = null;
+function applyLook() {
+  const L = look();
+  const pen = PENS.find(p => p.id === L.pen) || PENS[0];
+  const r = document.documentElement.style;
+  r.fontSize = (16 * L.size * pen.k).toFixed(2) + 'px';
+  r.setProperty('--hand', `${pen.family},system-ui,sans-serif`);
+  r.setProperty('--track', pen.tr || '0');
+  const paper = /^#[0-9a-f]{6}$/i.test(L.paper) ? L.paper.toLowerCase() : '#fbf7ee';
+  const rgb = hexRgb(paper), W = [255, 255, 255], K = [0, 0, 0];
+  const dark = (0.2126 * rgb[0] + 0.7152 * rgb[1] + 0.0722 * rgb[2]) / 255 < 0.45;
+  const vars = dark
+    ? { '--paper-2': mixRgb(rgb, W, .07), '--card': mixRgb(rgb, W, .05), '--ink': '#ece9e3', '--ink-inv': paper, '--muted': '#9c9ea4', '--faint': '#6f7177',
+        '--line': 'rgba(190,205,230,.14)', '--line-strong': 'rgba(190,205,230,.28)', '--margin': 'rgba(230,120,110,.45)',
+        '--today': 'rgba(255,210,90,.10)', '--focus': 'rgba(190,205,230,.08)', '--accent': '#e48a80' }
+    : { '--paper-2': mixRgb(rgb, K, .05), '--card': mixRgb(rgb, W, .55), '--ink': '#26282c', '--ink-inv': mixRgb(rgb, W, .3), '--muted': '#85888e', '--faint': '#b3b3ae',
+        '--line': 'rgba(110,140,180,.22)', '--line-strong': 'rgba(110,140,180,.40)', '--margin': 'rgba(214,96,90,.45)',
+        '--today': 'rgba(255,200,60,.20)', '--focus': 'rgba(110,140,180,.10)', '--accent': '#c9574e' };
+  r.setProperty('--paper', paper);
+  for (const [k, v] of Object.entries(vars)) r.setProperty(k, v);
+  const meta = document.querySelector('meta[name=theme-color]');
+  if (meta) meta.content = paper;
+  if (NATIVE) {
+    try { SB ||= plug('SystemBars'); SB.setStyle({ style: dark ? 'DARK' : 'LIGHT' }).catch(() => {}); } catch {}
+  }
+}
+function openLook() {
+  const L = look();
+  const wrap = h('div', {});
+  const draw = () => {
+    const cur = PENS.find(p => p.id === L.pen) || PENS[0];
+    const preset = PAPERS.some(p => p[1] === L.paper.toLowerCase());
+    const pct = h('b', {}, Math.round(L.size * 100) + '%');
+    put(wrap,
+      h('label', { class: 'lbl' }, 'Paper'),
+      h('div', { class: 'papers' },
+        PAPERS.map(([n, c]) => h('button', { class: 'paper' + (L.paper.toLowerCase() === c ? ' on' : ''), style: `background:${c}`, 'aria-label': n, title: n,
+          onclick: () => { L.paper = c; save(); applyLook(); draw(); } })),
+        h('label', { class: 'paper custom' + (preset ? '' : ' on'), title: 'Any colour', style: preset ? '' : `background:${L.paper}` },
+          preset ? ic('plus') : null,
+          h('input', { type: 'color', value: L.paper, 'aria-label': 'Any colour',
+            oninput: e => { L.paper = e.target.value; applyLook(); }, onchange: () => { save(); draw(); } }))),
+      h('div', { class: 'hint' }, 'The last square lets you pick any colour.'),
+      h('label', { class: 'lbl' }, 'Pen'),
+      h('div', { class: 'pens' }, PENS.map(p => h('button', {
+        class: 'pen' + (cur.id === p.id ? ' on' : ''),
+        style: `font-family:${p.family};font-size:${(1.15 * p.k / cur.k).toFixed(3)}rem`,
+        onclick: () => { L.pen = p.id; save(); applyLook(); draw(); },
+      }, h('small', {}, p.name), 'Went to the beach'))),
+      h('label', { class: 'lbl' }, 'Size'),
+      h('div', { class: 'sizerow' },
+        h('span', { style: 'font-size:.8rem' }, 'A'),
+        h('input', { type: 'range', min: 60, max: 130, step: 5, value: Math.round(L.size * 100), 'aria-label': 'Size',
+          oninput: e => { L.size = e.target.value / 100; pct.textContent = e.target.value + '%'; applyLook(); },
+          onchange: () => save() }),
+        h('span', { style: 'font-size:1.3rem' }, 'A'), pct),
+      h('div', { class: 'hint' }, 'Smaller fits more on the screen.'));
+  };
+  draw();
+  sheet('Paper, pen & size', wrap);
+}
+
 /* ---------- menu ---------- */
 function openMenu() {
   const close = sheet('Notebook', h('div', { class: 'menu-list' },
+    h('button', { onclick: () => { close(); openLook(); } }, 'Paper, pen & size', h('small', {}, 'Paper colour, handwriting and zoom')),
     h('button', { onclick: () => { close(); openReminders(); } }, 'Reminders', h('small', {}, 'Daily check-ins, notifications, Calendar')),
     h('button', { onclick: () => { close(); openDoodleLibrary(); } }, 'My doodles', h('small', {}, 'Edit, rename or delete your stamps')),
     h('button', { onclick: () => { close(); copyFromPrev(); } }, 'Copy last month’s setup', h('small', {}, 'Trackers & goals into this month')),
@@ -886,7 +985,7 @@ function openDoodleLibrary() {
       },
     }) }, h('img', { src: dd.img, alt: '' }), h('span', {}, dd.name || ' '))),
     h('button', { class: 'stamp new', onclick: () => openDoodleEditor({ title: 'New doodle', withName: true,
-      onSave: (img, name) => { state.doodles[uid()] = { img, name }; save(); draw(); } }) }, h('span', { class: 'plus' }, '+'), h('span', {}, 'Draw new')));
+      onSave: (img, name) => { state.doodles[uid()] = { img, name }; save(); draw(); } }) }, h('span', { class: 'plus' }, ic('plus')), h('span', {}, 'Draw new')));
   draw();
   sheet('My doodles', [h('div', { class: 'hint' }, 'These can be stamped on any day, in any month.'), grid]);
 }
@@ -916,7 +1015,7 @@ function importBackup() {
       const s = data.state || data;
       if (!s.months || !s.doodles) throw new Error('bad');
       if (!confirm('Replace everything in this notebook with the backup?')) return;
-      state = s; await writeState(); render(false); toast('Backup restored ✓');
+      state = s; await writeState(); applyLook(); render(false); toast('Backup restored');
     } catch { toast('That file isn’t a planner backup'); }
   });
   document.body.append(inp); inp.click();
@@ -924,14 +1023,15 @@ function importBackup() {
 function openHelp() {
   sheet('How to use', h('ul', { class: 'steps' },
     h('li', {}, 'Write one line per day in the Days page.'),
-    h('li', {}, 'Tap the little dot next to a day to stamp a doodle on it (draw your own — e.g. a blood drop for the day your period started).'),
+    h('li', {}, 'Tap the little dot next to a day to stamp a doodle on it (draw your own, e.g. a blood drop for the day your period started).'),
     h('li', {}, 'Tap + at the top right of the table to add a tracker column: a tick, number, letter, word or your own doodle.'),
     h('li', {}, 'Tap a tracker’s name to rename, move or delete it.'),
-    h('li', {}, 'To-do: a list for each day. Tap a day number on the Days page to jump to its to-do list. Add a time with ⏰ to get reminded.'),
+    h('li', {}, 'To-do: a list for each day. Tap a day number on the Days page to jump to its to-do list. Tap the clock on a to-do to get reminded.'),
     h('li', {}, NATIVE ? 'Reminders (in the menu): set your daily check-in times and turn on notifications.' : 'Reminders (in the menu): set daily check-in times, turn on notifications, or add them to your phone’s Calendar so they alert you even when the planner is closed.'),
     h('li', {}, 'Goals: list what you want this month and tick them off later.'),
     h('li', {}, 'Notes: free page with text, tables and mini doodles.'),
     h('li', {}, 'Tap the month name to jump back to today.'),
+    h('li', {}, 'Paper, pen & size (in the menu): change the paper colour, the handwriting and how big everything looks.'),
     h('li', {}, 'Everything is stored only on this phone — use “Save backup” from the menu every so often.'),
     NATIVE && h('li', {}, 'Moving from the web version? Save a backup there, then use “Restore backup” here.')));
 }
@@ -940,6 +1040,7 @@ function openHelp() {
 (async function boot() {
   const s = await loadState();
   if (s && s.months) state = s;
+  applyLook();
   render(false);
   setTimeout(tick, 1500);
   if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
